@@ -77,7 +77,10 @@ function Home() {
   };
 
   const demo = () => {
-    const sample = [parseRepoUrl("https://github.com/codeWithEdison/repo-lens")!];
+    const sample = [
+      parseRepoUrl("https://github.com/tanstack/router")!,
+      parseRepoUrl("https://github.com/honojs/hono")!,
+    ];
     setRepos(sample);
     void startAnalysis(sample);
   };
@@ -260,7 +263,7 @@ function Home() {
               onClick={demo}
               className="mt-6 text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             >
-              or try a live demo on this repository →
+              or try a live demo with sample repositories →
             </button>
           )}
         </section>
