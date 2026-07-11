@@ -19,7 +19,6 @@ import {
   FileJson,
   FileText,
   Link2,
-  Sparkles,
   Code2,
   Package,
   Layers,
@@ -228,7 +227,7 @@ function ReportPage() {
           style={{ boxShadow: "var(--shadow-card)" }}
         >
           <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-accent" /> AI Summary
+            <FileText className="h-3.5 w-3.5 text-accent" /> Project summary
           </div>
           <p className="text-[15px] leading-relaxed text-foreground/90">{report.aiSummary}</p>
         </section>

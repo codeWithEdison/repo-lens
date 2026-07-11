@@ -99,8 +99,12 @@ function Home() {
             <span className="text-gradient">RepoLens</span>
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-            See who built what. Analyze one or multiple repositories and discover real engineering
-            contributions — not just commits or lines of code.
+            Evidence-based contribution analysis from Git history. Paste one or more
+            repositories — public or private, any branch — and get a transparent report
+            with scores, feature ownership, and exports.
+          </p>
+          <p className="mx-auto mt-2 max-w-lg text-xs text-muted-foreground/80">
+            No login · temporary workspaces · scores from Git evidence, not AI by default
           </p>
 
           <div
@@ -267,16 +271,16 @@ function Home() {
         <section className="relative mx-auto grid max-w-5xl gap-3 px-6 pb-24 sm:grid-cols-3">
           {[
             {
-              title: "Real ownership",
-              body: "Detects features, modules, and who actually owns them — not just who touched files.",
+              title: "Git-backed analysis",
+              body: "Clones your repo, reads commit history and project structure, and filters bots, merges, and low-signal noise.",
             },
             {
-              title: "Complexity-weighted",
-              body: "Scores contributions by architectural depth, review load, and consistency over time.",
+              title: "Transparent scoring",
+              body: "Eight weighted metrics — ownership, delivery, complexity, consistency, and more. Commit count and LoC are evidence, not the final score.",
             },
             {
-              title: "AI-generated report",
-              body: "A professional summary explaining who built what — and why they scored the way they did.",
+              title: "Exportable report",
+              body: "PDF, JSON, and CSV with methodology, limitations, and per-contributor evidence — estimates to support discussion.",
             },
           ].map((f) => (
             <div

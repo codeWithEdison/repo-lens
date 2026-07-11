@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className="mx-auto max-w-6xl px-6 py-10 text-xs text-muted-foreground">
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-6">
           <span>© {new Date().getFullYear()} RepoLens — Open source</span>
-          <span>See who built what.</span>
+          <span>Evidence-based estimates — see methodology in each report.</span>
         </div>
       </footer>
     </div>
