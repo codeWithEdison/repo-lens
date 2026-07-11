@@ -1,0 +1,80 @@
+# RepoLens — stateless repository contribution analyzer.
+# https://github.com/codeWithEdison/repo-lens
+# Services: frontend, server (API), worker (analysis), redis (queue).
+# Only the temporary workspace volume is persisted, and it is shared between the
+# server and worker so both see the same analysis files. Repository clones are
+# deleted immediately after analysis and are never exposed to the frontend.
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      SERVER_PORT: 4000
+      FRONTEND_ORIGIN: http://localhost:5173
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WORKSPACE_ROOT: /workspace
+      ANALYSIS_RETENTION_HOURS: 24
+      MAX_REPOSITORIES_PER_ANALYSIS: 5
+      ALLOWED_GIT_HOSTS: github.com,gitlab.com,bitbucket.org
+    ports:
+      - "4000:4000"
+    volumes:
+      - workspace:/workspace
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WORKSPACE_ROOT: /workspace
+      ANALYSIS_RETENTION_HOURS: 24
+      CLEANUP_INTERVAL_MINUTES: 60
+      STALE_ANALYSIS_HOURS: 6
+      ANALYSIS_WORKER_CONCURRENCY: 2
+      MAX_REPOSITORY_SIZE_MB: 500
+      MAX_FILES_PER_REPOSITORY: 50000
+      GIT_CLONE_TIMEOUT_MINUTES: 10
+      ALLOWED_GIT_HOSTS: github.com,gitlab.com,bitbucket.org
+      AI_PROVIDER: none
+    volumes:
+      - workspace:/workspace
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      VITE_API_URL: http://localhost:4000
+    ports:
+      - "5173:5173"
+
+volumes:
+  workspace:
