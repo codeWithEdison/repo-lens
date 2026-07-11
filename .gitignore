@@ -20,6 +20,18 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Env
+.env
+.env.local
+*.env.local
+
+# Temporary analysis workspaces (never commit repo clones or reports)
+workspace/*
+!workspace/.gitkeep
+
+# Build tmp
+.tmp
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
