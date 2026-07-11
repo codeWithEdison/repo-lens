@@ -36,6 +36,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span>© {new Date().getFullYear()} RepoLens — Open source</span>
           <span>Evidence-based estimates — see methodology in each report.</span>
         </div>
+        <p className="mt-4 text-center text-[11px] text-muted-foreground/70">
+          Developed by{" "}
+          <a
+            href="https://github.com/codeWithEdison"
+            target="_blank"
+            rel="noreferrer"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            codewithedison
+          </a>
+        </p>
       </footer>
     </div>
   );
