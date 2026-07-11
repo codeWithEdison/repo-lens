@@ -146,10 +146,54 @@ See `.env.example` for the full list. Key values:
 | `GIT_CLONE_TIMEOUT_MINUTES` | `10` | Clone timeout |
 | `GIT_CLONE_DEPTH` | `0` | `0` = full history (recommended); `>0` = shallow |
 | `ALLOWED_GIT_HOSTS` | `github.com,gitlab.com,bitbucket.org` | SSRF allowlist |
+| `ALLOW_PRIVATE_REPOSITORIES` | `false` | Accept per-repo access tokens to clone private repos |
 | `AI_PROVIDER` | `none` | `none` or `openai-compatible` |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | – | Optional AI provider |
 | `GITHUB_TOKEN` | – | Optional, for GitHub metadata / rate limits |
 | `VITE_API_URL` | `http://localhost:4000` | Frontend → API base URL |
+
+---
+
+## Private repositories
+
+RepoLens can analyze private repositories on GitHub, GitLab, and Bitbucket
+using a short-lived access token.
+
+1. Enable the feature on the server: `ALLOW_PRIVATE_REPOSITORIES=true`
+   (requests that include a token are rejected with
+   `PRIVATE_REPOSITORIES_DISABLED` when this is `false`).
+2. In the UI, click **Private** next to the URL field and paste a token
+   (optionally a branch), then add the repository. Chips with a token show a
+   lock icon.
+3. Or call the API directly:
+
+```bash
+curl -X POST http://localhost:4000/api/analyses \
+  -H "Content-Type: application/json" \
+  -d '{"repositories":[{"url":"https://github.com/org/private-repo","accessToken":"<token>"}]}'
+```
+
+**Tokens by provider** (create a read-only token with repository read scope):
+
+- GitHub — Personal Access Token. A **classic** token with the `repo` scope is
+  simplest. A **fine-grained** token must have: resource owner set to the repo
+  owner/org, this repository in its selected repositories, and **Contents: Read
+  + Metadata: Read**. Org repos may require the org to enable/approve
+  fine-grained tokens, and SAML SSO orgs require a classic token. Authenticated
+  as `oauth2` over HTTPS.
+- GitLab — Project/Personal Access Token with `read_repository`. Sent as `oauth2`.
+- Bitbucket — App password / access token with repository read. Sent as
+  `x-token-auth`.
+
+> Note: GitHub returns "not found" (404) — not "unauthorized" — when a token
+> cannot see a repository, so a *scoping* problem looks like a missing repo.
+> If a valid token fails, re-check the token's resource owner, selected
+> repositories, and Contents/Metadata permissions.
+
+Tokens are used **only** to clone the repository for that analysis. They are
+authenticated via an HTTP `Authorization` header (never embedded in the stored
+remote URL), and are never written to metadata, progress, logs, reports, or
+exports.
 
 ---
 

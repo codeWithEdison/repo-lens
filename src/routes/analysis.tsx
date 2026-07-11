@@ -7,7 +7,7 @@ import {
   type BackendProgress,
   type ProgressSubscription,
 } from "@/lib/api-client";
-import { Check, Loader2, AlertTriangle } from "lucide-react";
+import { Check, Loader2, AlertTriangle, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/analysis")({
@@ -29,7 +29,7 @@ function AnalysisPage() {
   const navigate = useNavigate();
   const { id } = Route.useSearch();
   const [progress, setProgress] = useState<BackendProgress | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failure, setFailure] = useState<"failed" | "expired" | "connection" | null>(null);
   const subRef = useRef<ProgressSubscription | null>(null);
 
   useEffect(() => {
@@ -44,12 +44,12 @@ function AnalysisPage() {
         if (status === "completed") {
           navigate({ to: "/report", search: { id } });
         } else if (status === "failed") {
-          setFailed("The analysis failed. See details below.");
+          setFailure("failed");
         } else if (status === "expired") {
-          setFailed("This analysis has expired.");
+          setFailure("expired");
         }
       },
-      onError: () => setFailed("Lost connection to the analysis service."),
+      onError: () => setFailure("connection"),
     });
 
     return () => subRef.current?.close();
@@ -59,7 +59,27 @@ function AnalysisPage() {
   const overall = progress?.overallProgress ?? 0;
   const currentStep = progress ? stageToStepIndex(progress.currentStage) : 0;
   const repoCount = progress?.repositories.length ?? 0;
-  const message = failed ?? progress?.message ?? "Connecting to the analysis service…";
+  const failed = failure !== null;
+
+  // Prefer the backend's specific error message; fall back per failure kind.
+  const backendError = progress?.error?.message;
+  const errorCode = progress?.error?.code;
+  const failedRepos = progress?.repositories.filter((r) => r.status === "failed") ?? [];
+  const isAuthIssue =
+    errorCode === "REPOSITORY_CLONE_FAILED" ||
+    errorCode === "PRIVATE_REPOSITORIES_DISABLED" ||
+    /private|access token|authenticat|not found|could not access/i.test(backendError ?? "");
+
+  let message: string;
+  if (failure === "expired") {
+    message = "This analysis has expired and its data was removed.";
+  } else if (failure === "connection") {
+    message = "Lost connection to the analysis service. Check that the API is running and try again.";
+  } else if (failure === "failed") {
+    message = backendError ?? "The analysis failed.";
+  } else {
+    message = progress?.message ?? "Connecting to the analysis service…";
+  }
 
   return (
     <AppShell>
@@ -85,8 +105,49 @@ function AnalysisPage() {
         </div>
 
         {failed ? (
-          <div className="text-center">
-            <Button onClick={() => navigate({ to: "/" })}>Start a new analysis</Button>
+          <div className="space-y-4">
+            {failure === "failed" && (
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+                <p className="text-sm text-foreground">{message}</p>
+                {failedRepos.length > 0 && (
+                  <ul className="mt-3 space-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    {failedRepos.map((r) => (
+                      <li key={r.url} className="flex items-center gap-2">
+                        <AlertTriangle className="h-3 w-3 shrink-0 text-destructive" />
+                        <span className="truncate">{r.name}</span>
+                        <span className="text-muted-foreground/70">— {r.currentStage ?? "failed"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {isAuthIssue && failure === "failed" && (
+              <div className="rounded-2xl border border-border/60 bg-card/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <Lock className="h-4 w-4 text-accent" /> Analyzing a private repository?
+                </div>
+                <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+                  A valid token still fails if it isn&apos;t scoped to this repo. For a
+                  GitHub <span className="text-foreground">fine-grained</span> token, check all of:
+                </p>
+                <ul className="ml-1 list-inside list-disc space-y-1 text-xs leading-relaxed text-muted-foreground">
+                  <li><span className="text-foreground">Resource owner</span> = the repo&apos;s owner/org (e.g. the organization, not your personal account).</li>
+                  <li><span className="text-foreground">Repository access</span> includes this exact repository (a token limited to selected repos returns &quot;not found&quot; for any other repo).</li>
+                  <li><span className="text-foreground">Permissions</span>: Contents → Read and Metadata → Read.</li>
+                  <li>For org repos, the org must <span className="text-foreground">enable/approve</span> fine-grained tokens; SAML SSO orgs need a <span className="text-foreground">classic</span> token with <code>repo</code> scope.</li>
+                  <li>Then on the home screen click <span className="text-foreground">Private</span>, paste the token, and click <span className="text-foreground">Add</span> before Analyze.</li>
+                </ul>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Tip: a <span className="text-foreground">classic</span> PAT with the <code>repo</code> scope avoids most of these pitfalls.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-center gap-2 pt-2">
+              <Button onClick={() => navigate({ to: "/" })}>Start a new analysis</Button>
+            </div>
           </div>
         ) : (
           <>

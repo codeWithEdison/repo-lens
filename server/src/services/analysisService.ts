@@ -65,6 +65,16 @@ export async function createAnalysis(rawBody: unknown): Promise<CreateAnalysisRe
     }
     seen.add(comparison);
 
+    // Access tokens (private repositories) are only accepted when the operator
+    // has explicitly enabled them. This keeps the default deployment public-only.
+    if (repo.accessToken && !env.ALLOW_PRIVATE_REPOSITORIES) {
+      throw new AppError(
+        403,
+        ERROR_CODES.PRIVATE_REPOSITORIES_DISABLED,
+        "Private repository access is disabled on this server. Set ALLOW_PRIVATE_REPOSITORIES=true to enable it.",
+      );
+    }
+
     let validated;
     try {
       validated = validateRepositoryUrl(repo.url, { allowedHosts: env.allowedGitHosts });
@@ -84,19 +94,23 @@ export async function createAnalysis(rawBody: unknown): Promise<CreateAnalysisRe
     }
     usedDirNames.add(name);
 
+    // Prefer an explicitly supplied branch; otherwise use one detected from a
+    // web URL like .../tree/<branch>.
+    const branch = repo.branch ?? validated.branch;
+
     prepared.push({
       meta: {
         name,
         provider: validated.provider,
         url: validated.cleanUrl,
-        branch: repo.branch,
+        branch,
       },
       job: {
         name,
         url: validated.cleanUrl,
         cleanUrl: validated.cleanUrl,
         provider: validated.provider,
-        branch: repo.branch,
+        branch,
         accessToken: repo.accessToken,
       },
     });

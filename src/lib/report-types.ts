@@ -11,6 +11,13 @@ export interface RepoInput {
   url: string;
   name: string;
   source: RepoSource;
+  /** Optional branch to analyze (defaults to the repo's default branch). */
+  branch?: string;
+  /**
+   * Optional short-lived access token for private repositories. Held only in
+   * memory for the duration of the submission — never persisted or displayed.
+   */
+  accessToken?: string;
 }
 
 export interface Developer {
@@ -73,14 +80,43 @@ export const ANALYSIS_STEPS = [
 ] as const;
 
 /** Parse a repository URL for the input chips (display only; server re-validates). */
-export function parseRepoUrl(url: string): RepoInput | null {
+export function parseRepoUrl(
+  url: string,
+  options?: { branch?: string; accessToken?: string },
+): RepoInput | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
   let source: RepoSource = "github";
   if (trimmed.includes("gitlab")) source = "gitlab";
   else if (trimmed.includes("bitbucket")) source = "bitbucket";
   else if (!trimmed.includes("github")) source = "generic";
-  const parts = trimmed.replace(/\.git$/, "").split("/").filter(Boolean);
-  const name = parts.slice(-2).join("/") || trimmed;
-  return { id: crypto.randomUUID(), url: trimmed, name, source };
+  // Best-effort: strip a web-view suffix (…/tree/<branch>, …/blob/…, GitLab's
+  // …/-/…) so the chip shows "owner/repo" and we can pre-fill the branch. The
+  // server re-validates and is the source of truth.
+  const path = trimmed.replace(/^https?:\/\//, "").replace(/\.git$/, "");
+  const segments = path.split("/").filter(Boolean);
+  // segments[0] is the host; owner/repo start at index 1.
+  const viewKeywords = new Set(["tree", "blob", "commit", "commits", "src", "branch", "-"]);
+  let repoSegs = segments.slice(1);
+  let detectedBranch: string | undefined;
+  const dashIdx = repoSegs.indexOf("-");
+  if (dashIdx > 1) {
+    const rest = repoSegs.slice(dashIdx + 1);
+    if (rest[0] === "tree" || rest[0] === "blob") detectedBranch = rest[1];
+    repoSegs = repoSegs.slice(0, dashIdx);
+  } else {
+    for (let i = 2; i < repoSegs.length; i++) {
+      if (viewKeywords.has(repoSegs[i])) {
+        if (repoSegs[i] === "tree" || repoSegs[i] === "blob" || repoSegs[i] === "src" || repoSegs[i] === "branch") {
+          detectedBranch = repoSegs[i + 1];
+        }
+        repoSegs = repoSegs.slice(0, i);
+        break;
+      }
+    }
+  }
+  const name = repoSegs.slice(-2).join("/") || trimmed;
+  const branch = options?.branch?.trim() || detectedBranch || undefined;
+  const accessToken = options?.accessToken?.trim() || undefined;
+  return { id: crypto.randomUUID(), url: trimmed, name, source, branch, accessToken };
 }

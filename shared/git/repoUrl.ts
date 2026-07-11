@@ -23,6 +23,60 @@ export interface ParsedRepository {
   cleanUrl: string;
   /** Short display name, e.g. "owner/name". */
   displayName: string;
+  /** Branch detected from a web URL (e.g. .../tree/<branch>), if any. */
+  branch?: string;
+}
+
+/**
+ * Web-view path segments used by Git hosts to point at a branch/file/commit
+ * rather than the repository root (e.g. github.com/o/r/tree/main). The repo
+ * path is everything before the first of these.
+ */
+const WEB_VIEW_SEGMENTS = new Set([
+  "tree",
+  "blob",
+  "commit",
+  "commits",
+  "releases",
+  "tags",
+  "branches",
+  "pull",
+  "pulls",
+  "merge_requests",
+  "issues",
+  "actions",
+  "wiki",
+  "raw",
+  "compare",
+  "src", // bitbucket branch view
+  "branch",
+  "pull-requests", // bitbucket
+]);
+
+/** Segments after which the next segment is a branch/ref name. */
+const BRANCH_PREFIX_SEGMENTS = new Set(["tree", "blob", "src", "branch"]);
+
+/**
+ * Reduce a URL path to the repository path segments, extracting a branch when
+ * the URL is a web view like `/owner/repo/tree/<branch>`. Handles GitLab's
+ * `/-/` separator (which precedes the view for nested group projects).
+ */
+function extractRepoPath(segments: string[]): { repoSegments: string[]; branch?: string } {
+  const dashIdx = segments.indexOf("-");
+  if (dashIdx > 1) {
+    const repoSegments = segments.slice(0, dashIdx);
+    const rest = segments.slice(dashIdx + 1);
+    const branch = rest[0] && BRANCH_PREFIX_SEGMENTS.has(rest[0]) ? rest[1] : undefined;
+    return { repoSegments, branch };
+  }
+
+  for (let i = 2; i < segments.length; i++) {
+    if (WEB_VIEW_SEGMENTS.has(segments[i])) {
+      const branch = BRANCH_PREFIX_SEGMENTS.has(segments[i]) ? segments[i + 1] : undefined;
+      return { repoSegments: segments.slice(0, i), branch };
+    }
+  }
+  return { repoSegments: segments };
 }
 
 const PRIVATE_IPV4_PATTERNS: RegExp[] = [
@@ -148,10 +202,14 @@ export function validateRepositoryUrl(
     );
   }
 
-  const segments = parsed.pathname
+  const allSegments = parsed.pathname
     .replace(/\.git$/i, "")
     .split("/")
     .filter(Boolean);
+
+  // Strip web-view suffixes like /tree/<branch> or /blob/<branch>/<path> so a
+  // pasted browser URL still resolves to the correct clone target.
+  const { repoSegments: segments, branch } = extractRepoPath(allSegments);
 
   if (segments.length < 2) {
     throw new RepoUrlError(
@@ -172,6 +230,7 @@ export function validateRepositoryUrl(
     name,
     cleanUrl,
     displayName: `${owner}/${name}`,
+    branch,
   };
 }
 

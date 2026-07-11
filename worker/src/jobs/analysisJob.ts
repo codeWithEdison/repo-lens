@@ -61,6 +61,7 @@ export async function runAnalysisJob(payload: AnalysisJobPayload): Promise<void>
     await ensureNotCancelled();
     await reporter.stage("Cloning Repositories", "Cloning repositories (no scripts are executed).");
     const cloned: Array<{ job: RepoJob; repoPath: string; git: SimpleGit }> = [];
+    const cloneFailures: string[] = [];
     for (let i = 0; i < repositories.length; i++) {
       const job = repositories[i];
       await ensureNotCancelled();
@@ -80,6 +81,7 @@ export async function runAnalysisJob(payload: AnalysisJobPayload): Promise<void>
         if (err instanceof CloneError) {
           await reporter.setRepositoryProgress(job.name, { status: "failed", progress: 0 });
           await reporter.log("error", "Cloning Repositories", err.message, { code: err.code }, job.name);
+          cloneFailures.push(err.message);
           // Continue with other repositories rather than failing the whole run.
           continue;
         }
@@ -88,7 +90,16 @@ export async function runAnalysisJob(payload: AnalysisJobPayload): Promise<void>
     }
 
     if (cloned.length === 0) {
-      throw new AnalysisError(ERROR_CODES.REPOSITORY_CLONE_FAILED, "No repositories could be cloned.");
+      // Surface the specific, actionable reason (auth/private, not found, etc.)
+      // instead of a generic message so the UI can guide the user.
+      const detail =
+        cloneFailures.length === 1
+          ? cloneFailures[0]
+          : cloneFailures.join(" ");
+      throw new AnalysisError(
+        ERROR_CODES.REPOSITORY_CLONE_FAILED,
+        detail || "No repositories could be cloned.",
+      );
     }
 
     // Stages 3-6 per repository: history, metadata, structure.

@@ -53,6 +53,30 @@ describe("repository URL validation", () => {
     expect(() => validateRepositoryUrl("https://github.com/onlyowner")).toThrow();
   });
 
+  it("strips a /tree/<branch> web URL and detects the branch", () => {
+    const parsed = validateRepositoryUrl("https://github.com/binaryhubrw/inuma_bn/tree/ur-server");
+    expect(parsed.name).toBe("inuma_bn");
+    expect(parsed.cleanUrl).toBe("https://github.com/binaryhubrw/inuma_bn.git");
+    expect(parsed.branch).toBe("ur-server");
+  });
+
+  it("strips a /blob/<branch>/<path> web URL", () => {
+    const parsed = validateRepositoryUrl(
+      "https://github.com/tanstack/router/blob/main/README.md",
+    );
+    expect(parsed.cleanUrl).toBe("https://github.com/tanstack/router.git");
+    expect(parsed.branch).toBe("main");
+  });
+
+  it("handles GitLab nested groups with the /-/ view separator", () => {
+    const parsed = validateRepositoryUrl(
+      "https://gitlab.com/group/subgroup/app/-/tree/develop",
+      { allowedHosts: ["gitlab.com"] },
+    );
+    expect(parsed.cleanUrl).toBe("https://gitlab.com/group/subgroup/app.git");
+    expect(parsed.branch).toBe("develop");
+  });
+
   it("normalizeForComparison ignores .git and trailing slash and case", () => {
     expect(normalizeForComparison("https://GitHub.com/A/B.git/")).toBe(
       normalizeForComparison("https://github.com/a/b"),

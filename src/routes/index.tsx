@@ -3,7 +3,7 @@ import { useState, type KeyboardEvent } from "react";
 import { AppShell } from "@/components/repolens/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Github, GitBranch, Plus, Sparkles, X, ArrowRight, Upload, Loader2 } from "lucide-react";
+import { Github, GitBranch, Plus, Sparkles, X, ArrowRight, Upload, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { parseRepoUrl, type RepoInput } from "@/lib/report-types";
 import { createAnalysis, RepoLensApiError } from "@/lib/api-client";
@@ -17,9 +17,13 @@ function Home() {
   const [url, setUrl] = useState("");
   const [repos, setRepos] = useState<RepoInput[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [showPrivate, setShowPrivate] = useState(false);
+  const [showBranch, setShowBranch] = useState(false);
+  const [branch, setBranch] = useState("");
+  const [accessToken, setAccessToken] = useState("");
 
   const addRepo = () => {
-    const parsed = parseRepoUrl(url);
+    const parsed = parseRepoUrl(url, { branch, accessToken });
     if (!parsed) {
       toast.error("Enter a repository URL");
       return;
@@ -30,6 +34,10 @@ function Home() {
     }
     setRepos((prev) => [...prev, parsed]);
     setUrl("");
+    setBranch("");
+    setAccessToken("");
+    setShowPrivate(false);
+    setShowBranch(false);
   };
 
   const removeRepo = (id: string) => setRepos((prev) => prev.filter((r) => r.id !== id));
@@ -41,7 +49,13 @@ function Home() {
     }
     setSubmitting(true);
     try {
-      const result = await createAnalysis(targetRepos.map((r) => ({ url: r.url })));
+      const result = await createAnalysis(
+        targetRepos.map((r) => ({
+          url: r.url,
+          branch: r.branch,
+          accessToken: r.accessToken,
+        })),
+      );
       navigate({ to: "/analysis", search: { id: result.analysisId } });
     } catch (err) {
       const message =
@@ -106,10 +120,66 @@ function Home() {
                 placeholder="Paste a GitHub, GitLab, or Bitbucket URL"
                 className="h-10 min-w-0 flex-1 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
               />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowBranch((v) => !v)}
+                className={`shrink-0 gap-1 ${showBranch || branch ? "text-accent" : "text-muted-foreground"}`}
+                aria-pressed={showBranch}
+                title="Choose a branch"
+              >
+                <GitBranch className="h-3.5 w-3.5" /> Branch
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowPrivate((v) => !v)}
+                className={`shrink-0 gap-1 ${showPrivate || accessToken ? "text-accent" : "text-muted-foreground"}`}
+                aria-pressed={showPrivate}
+                title="Private repository options"
+              >
+                <Lock className="h-3.5 w-3.5" /> Private
+              </Button>
               <Button size="sm" variant="ghost" onClick={addRepo} className="shrink-0 gap-1">
                 <Plus className="h-3.5 w-3.5" /> Add
               </Button>
             </div>
+
+            {(showBranch || showPrivate) && (
+              <div className="grid gap-2 border-t border-border/60 p-3 sm:grid-cols-2">
+                {showBranch && (
+                  <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-2">
+                    <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <Input
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      onKeyDown={onKey}
+                      placeholder="Branch (optional — defaults to default branch)"
+                      className="h-9 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0"
+                    />
+                  </div>
+                )}
+                {showPrivate && (
+                  <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-2">
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <Input
+                      value={accessToken}
+                      onChange={(e) => setAccessToken(e.target.value)}
+                      onKeyDown={onKey}
+                      type="password"
+                      autoComplete="off"
+                      placeholder="Access token (private repos)"
+                      className="h-9 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0"
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">
+                  {showPrivate
+                    ? "Tokens are used only to clone the repository for this analysis and are never stored, logged, or included in the report. Settings apply to the next repository you add."
+                    : "Branch and token settings apply to the next repository you add. You can also paste a branch URL (e.g. /tree/my-branch) and it will be detected automatically."}
+                </p>
+              </div>
+            )}
 
             {repos.length > 0 && (
               <div className="flex flex-wrap gap-1.5 border-t border-border/60 p-3">
@@ -118,8 +188,15 @@ function Home() {
                     key={r.id}
                     className="group inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/60 py-1 pl-2 pr-1 text-xs"
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                    {r.accessToken ? (
+                      <Lock className="h-3 w-3 text-accent" aria-label="Private" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                    )}
                     <span className="max-w-[220px] truncate">{r.name}</span>
+                    {r.branch ? (
+                      <span className="text-muted-foreground">#{r.branch}</span>
+                    ) : null}
                     <button
                       onClick={() => removeRepo(r.id)}
                       className="rounded p-0.5 text-muted-foreground opacity-60 transition-opacity hover:opacity-100"
@@ -137,9 +214,12 @@ function Home() {
                 variant="ghost"
                 size="sm"
                 className="gap-1.5 text-xs text-muted-foreground"
-                onClick={() => toast.info("GitHub connect coming soon")}
+                onClick={() => {
+                  setShowPrivate(true);
+                  toast.info("Add a personal access token under Private to analyze a private repo");
+                }}
               >
-                <Github className="h-3.5 w-3.5" /> Connect GitHub
+                <Github className="h-3.5 w-3.5" /> Private repo
               </Button>
               <Button
                 variant="ghost"

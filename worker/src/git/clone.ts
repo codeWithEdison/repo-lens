@@ -35,6 +35,74 @@ export interface CloneResult {
   git: SimpleGit;
 }
 
+/**
+ * Turn raw git clone output into a concise, actionable message. The most common
+ * failure is an authentication/not-found error on a private repository.
+ */
+function friendlyCloneMessage(raw: string, job: RepoJob): string {
+  const lower = raw.toLowerCase();
+  const hasToken = Boolean(job.accessToken);
+
+  // No token supplied and git had to prompt → repo is private (or missing).
+  if (!hasToken && (lower.includes("could not read username") || lower.includes("terminal prompts disabled"))) {
+    return `Could not access "${job.name}". It appears to be private or does not exist. If it is private, add an access token with read permission (click "Private" on the home screen).`;
+  }
+
+  // Invalid / expired credentials (HTTP 401).
+  if (
+    lower.includes("authentication failed") ||
+    lower.includes("invalid username or password") ||
+    lower.includes("401")
+  ) {
+    return `Authentication failed for "${job.name}". The access token is invalid, expired, or malformed. Generate a new token and try again.`;
+  }
+
+  // Forbidden — usually SAML/SSO authorization or missing permission (HTTP 403).
+  if (lower.includes("saml") || lower.includes("sso") || lower.includes("403") || lower.includes("access denied")) {
+    return `Access to "${job.name}" was forbidden. If the organization uses SAML SSO, authorize the token for that org (fine-grained tokens may not support SSO — use a classic token with "repo" scope), or grant the token read access.`;
+  }
+
+  // Not found — for a token this almost always means the token can't see the
+  // repo: wrong resource owner, repo not in the token's selected repositories,
+  // missing Contents/Metadata read, or pending org approval (GitHub returns 404).
+  if (lower.includes("not found") || lower.includes("could not read username") || lower.includes("terminal prompts disabled")) {
+    if (hasToken) {
+      return `Could not access "${job.name}". The token does not have access to this repository (GitHub returns "not found" in this case). Check: the repository URL is correct; the token's resource owner is the repo owner/org; the repository is included in the token's selected repositories; and it has Contents: Read + Metadata: Read. Org repos may also require the org to enable/approve fine-grained tokens.`;
+    }
+    return `Could not access "${job.name}". It appears to be private or does not exist. If it is private, add an access token with read permission.`;
+  }
+
+  if (lower.includes("timed out") || lower.includes("timeout")) {
+    return `Cloning "${job.name}" timed out. The repository may be too large or the network too slow.`;
+  }
+  if (lower.includes("could not resolve host") || lower.includes("unable to access")) {
+    return `Could not reach the git host for "${job.name}". Check the repository URL and network connectivity.`;
+  }
+
+  // Fall back to the first line of raw git output (already token-redacted).
+  const firstLine = raw.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? raw.trim();
+  return `Failed to clone "${job.name}": ${firstLine}`;
+}
+
+/**
+ * Username to pair with a token for git-over-HTTPS Basic auth, per provider.
+ *
+ * "oauth2" is the most compatible username for GitHub (works with both classic
+ * and fine-grained PATs — fine-grained tokens are NOT authenticated with the
+ * "x-access-token" username and would be treated as anonymous, yielding a 404)
+ * and for GitLab. Bitbucket expects "x-token-auth".
+ */
+function gitAuthUsername(provider: string): string {
+  switch (provider) {
+    case "bitbucket":
+      return "x-token-auth";
+    case "github":
+    case "gitlab":
+    default:
+      return "oauth2";
+  }
+}
+
 export async function cloneRepository(job: RepoJob, targetPath: string): Promise<CloneResult> {
   // Re-validate before any network / filesystem action.
   validateRepositoryUrl(job.cleanUrl, { allowedHosts: env.allowedGitHosts });
@@ -68,9 +136,15 @@ export async function cloneRepository(job: RepoJob, targetPath: string): Promise
   if (job.branch) {
     cloneArgs.push("--branch", job.branch, "--single-branch");
   }
+  let basicAuth: string | undefined;
   if (job.accessToken) {
-    // Token travels as a request header, not embedded in the stored remote URL.
-    cloneArgs.push("--config", `http.extraHeader=Authorization: Bearer ${job.accessToken}`);
+    // Authenticate via an HTTP Basic header rather than embedding the token in
+    // the remote URL (which would be written to .git/config on disk). GitHub,
+    // GitLab and Bitbucket each expect a provider-specific username with the
+    // token as the password.
+    const username = gitAuthUsername(job.provider);
+    basicAuth = Buffer.from(`${username}:${job.accessToken}`).toString("base64");
+    cloneArgs.push("--config", `http.extraHeader=Authorization: Basic ${basicAuth}`);
   }
 
   const prevPrompt = process.env.GIT_TERMINAL_PROMPT;
@@ -78,10 +152,11 @@ export async function cloneRepository(job: RepoJob, targetPath: string): Promise
   try {
     await git.clone(job.cleanUrl, targetPath, cloneArgs);
   } catch (err) {
-    throw new CloneError(
-      "REPOSITORY_CLONE_FAILED",
-      `Failed to clone repository ${job.name}: ${(err as Error).message.replace(job.accessToken ?? "\u0000", "***")}`,
-    );
+    // Redact both the raw token and its base64 form from any surfaced message.
+    let raw = (err as Error).message;
+    if (job.accessToken) raw = raw.split(job.accessToken).join("***");
+    if (basicAuth) raw = raw.split(basicAuth).join("***");
+    throw new CloneError("REPOSITORY_CLONE_FAILED", friendlyCloneMessage(raw, job));
   } finally {
     if (prevPrompt === undefined) delete process.env.GIT_TERMINAL_PROMPT;
     else process.env.GIT_TERMINAL_PROMPT = prevPrompt;
