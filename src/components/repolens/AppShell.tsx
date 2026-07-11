@@ -12,14 +12,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <nav className="flex items-center gap-6 text-sm text-muted-foreground">
             <a
-              href="https://github.com"
+              href="https://github.com/codeWithEdison/repo-lens"
               target="_blank"
               rel="noreferrer"
               className="transition-colors hover:text-foreground"
             >
               GitHub
             </a>
-            <a href="#" className="transition-colors hover:text-foreground">
+            <a
+              href="https://github.com/codeWithEdison/repo-lens/blob/main/README.md"
+              target="_blank"
+              rel="noreferrer"
+              className="transition-colors hover:text-foreground"
+            >
               Docs
             </a>
           </nav>
