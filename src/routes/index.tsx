@@ -3,7 +3,7 @@ import { useState, type KeyboardEvent } from "react";
 import { AppShell } from "@/components/repolens/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Github, GitBranch, Plus, Sparkles, X, ArrowRight, Upload, Loader2, Lock } from "lucide-react";
+import { Github, GitBranch, Plus, X, ArrowRight, Upload, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { parseRepoUrl, type RepoInput } from "@/lib/report-types";
 import { createAnalysis, RepoLensApiError } from "@/lib/api-client";
@@ -95,10 +95,6 @@ function Home() {
         <div className="grid-bg pointer-events-none absolute inset-x-0 top-0 h-[600px]" />
 
         <section className="relative mx-auto max-w-3xl px-6 pb-16 pt-24 text-center sm:pt-32">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/40 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-            <Sparkles className="h-3 w-3 text-accent" />
-            AI-powered contribution analysis
-          </div>
           <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
             <span className="text-gradient">RepoLens</span>
           </h1>
