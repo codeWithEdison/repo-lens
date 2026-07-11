@@ -1,6 +1,15 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "repo-lens",
   "private": true,
+  "description": "Stateless, open-source repository contribution analyzer.",
+  "homepage": "https://github.com/codeWithEdison/repo-lens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeWithEdison/repo-lens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codeWithEdison/repo-lens/issues"
+  },
   "sideEffects": false,
   "type": "module",
   "scripts": {
@@ -9,7 +18,15 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "install:all": "npm install && npm --prefix server install && npm --prefix worker install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:worker": "npm --prefix worker run dev",
+    "typecheck": "tsc --noEmit",
+    "typecheck:all": "tsc --noEmit && npm --prefix server run typecheck && npm --prefix worker run typecheck",
+    "test:all": "npm --prefix server test && npm --prefix worker test",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
