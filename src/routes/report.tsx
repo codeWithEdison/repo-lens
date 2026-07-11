@@ -28,6 +28,8 @@ import {
   Boxes,
   Loader2,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -58,12 +60,18 @@ const CHART_COLORS = [
   "oklch(0.72 0.2 20)",
 ];
 
+const RANKING_PAGE_SIZE = 10;
+const FEATURES_PAGE_SIZE = 9;
+const SHARE_TOP = 6;
+
 function ReportPage() {
   const navigate = useNavigate();
   const { id } = Route.useSearch();
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rankPage, setRankPage] = useState(0);
+  const [featPage, setFeatPage] = useState(0);
 
   useEffect(() => {
     if (!id) {
@@ -150,10 +158,35 @@ function ReportPage() {
     }
   };
 
-  const pieData = report.developers.map((d) => ({
+  const OTHERS_COLOR = "oklch(0.55 0.02 260)";
+
+  // Technical Share stays compact: show the top contributors and fold the rest
+  // into a single "Others" slice so the chart is readable with any team size.
+  const shareTop = report.developers.slice(0, SHARE_TOP);
+  const shareRest = report.developers.slice(SHARE_TOP);
+  const shareOthersPct =
+    Math.round(shareRest.reduce((sum, d) => sum + d.suggestedShare, 0) * 10) / 10;
+  const shareOthersCount = shareRest.length;
+
+  const pieData = shareTop.map((d) => ({
     name: d.name.split(" ")[0],
     value: d.suggestedShare,
   }));
+  if (shareOthersPct > 0) {
+    pieData.push({ name: "Others", value: shareOthersPct });
+  }
+
+  // The timeline area chart becomes unreadable with many series, so cap it to
+  // the top contributors while the ranking, pie and share list show everyone.
+  const timelineDevs = report.developers.slice(0, 5);
+
+  const rankPageCount = Math.max(1, Math.ceil(report.developers.length / RANKING_PAGE_SIZE));
+  const rankStart = rankPage * RANKING_PAGE_SIZE;
+  const pagedDevelopers = report.developers.slice(rankStart, rankStart + RANKING_PAGE_SIZE);
+
+  const featPageCount = Math.max(1, Math.ceil(report.features.length / FEATURES_PAGE_SIZE));
+  const featStart = featPage * FEATURES_PAGE_SIZE;
+  const pagedFeatures = report.features.slice(featStart, featStart + FEATURES_PAGE_SIZE);
 
   const stats = [
     { icon: GitBranch, label: "Repositories", value: report.repositories.length },
@@ -235,13 +268,18 @@ function ReportPage() {
         <section className="mb-10">
           <SectionHeader
             title="Contribution Ranking"
-            subtitle="Weighted by complexity, ownership, and reviews."
+            subtitle={
+              report.totalContributors > report.developers.length
+                ? `Top ${report.developers.length} of ${report.totalContributors} contributors — shares are of the whole project. Weighted by complexity, ownership, and reviews.`
+                : `${report.developers.length} contributors — weighted by complexity, ownership, and reviews.`
+            }
           />
           <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/30">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">#</th>
                     <th className="px-5 py-3 font-medium">Developer</th>
                     <th className="px-3 py-3 font-medium">Contribution</th>
                     <th className="px-3 py-3 font-medium">Features</th>
@@ -253,11 +291,14 @@ function ReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.developers.map((d, i) => (
+                  {pagedDevelopers.map((d, localIdx) => {
+                    const i = rankStart + localIdx;
+                    return (
                     <tr
                       key={d.handle}
                       className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/30"
                     >
+                      <td className="px-5 py-3 tabular-nums text-muted-foreground">{i + 1}</td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div
@@ -282,7 +323,7 @@ function ReportPage() {
                               className="h-full rounded-full"
                               style={{
                                 width: `${d.contributionPct}%`,
-                                background: CHART_COLORS[i],
+                                background: CHART_COLORS[i % CHART_COLORS.length],
                               }}
                             />
                           </div>
@@ -300,10 +341,20 @@ function ReportPage() {
                         </span>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+            <Pagination
+              page={rankPage}
+              pageCount={rankPageCount}
+              onPage={setRankPage}
+              rangeStart={rankStart + 1}
+              rangeEnd={rankStart + pagedDevelopers.length}
+              total={report.developers.length}
+              noun="contributors"
+            />
           </div>
         </section>
 
@@ -314,10 +365,10 @@ function ReportPage() {
               <ResponsiveContainer>
                 <AreaChart data={report.timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
-                    {report.developers.map((d, i) => (
+                    {timelineDevs.map((d, i) => (
                       <linearGradient key={d.handle} id={`g-${i}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={CHART_COLORS[i]} stopOpacity={0.5} />
-                        <stop offset="100%" stopColor={CHART_COLORS[i]} stopOpacity={0} />
+                        <stop offset="0%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.5} />
+                        <stop offset="100%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0} />
                       </linearGradient>
                     ))}
                   </defs>
@@ -343,12 +394,12 @@ function ReportPage() {
                       fontSize: 12,
                     }}
                   />
-                  {report.developers.map((d, i) => (
+                  {timelineDevs.map((d, i) => (
                     <Area
                       key={d.handle}
                       type="monotone"
                       dataKey={d.name.split(" ")[0]}
-                      stroke={CHART_COLORS[i]}
+                      stroke={CHART_COLORS[i % CHART_COLORS.length]}
                       fill={`url(#g-${i})`}
                       strokeWidth={1.5}
                     />
@@ -361,7 +412,11 @@ function ReportPage() {
           <section className="rounded-2xl border border-border/60 bg-card/40 p-6">
             <SectionHeader
               title="Technical Share"
-              subtitle="Suggested equity / recognition split"
+              subtitle={
+                shareOthersCount > 0
+                  ? `Suggested split — top ${shareTop.length} of ${report.developers.length} contributors`
+                  : "Suggested equity / recognition split"
+              }
               small
             />
             <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
@@ -369,34 +424,55 @@ function ReportPage() {
                 <ResponsiveContainer>
                   <PieChart>
                     <Pie data={pieData} innerRadius={38} outerRadius={65} dataKey="value" stroke="none">
-                      {pieData.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      {pieData.map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={entry.name === "Others" ? OTHERS_COLOR : CHART_COLORS[i % CHART_COLORS.length]}
+                        />
                       ))}
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
               </div>
               <ul className="space-y-2 text-sm">
-                {report.developers.map((d, i) => (
+                {shareTop.map((d, i) => (
                   <li key={d.handle} className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
                         className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ background: CHART_COLORS[i] }}
+                        style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
                       />
                       <span className="truncate">{d.name}</span>
                     </div>
                     <span className="tabular-nums text-muted-foreground">{d.suggestedShare}%</span>
                   </li>
                 ))}
+                {shareOthersPct > 0 && (
+                  <li className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: OTHERS_COLOR }}
+                      />
+                      <span className="truncate">Others ({shareOthersCount})</span>
+                    </div>
+                    <span className="tabular-nums text-muted-foreground">{shareOthersPct}%</span>
+                  </li>
+                )}
               </ul>
             </div>
             <div className="mt-4 space-y-1.5 border-t border-border/60 pt-4 text-xs text-muted-foreground">
-              {report.developers.map((d) => (
+              {shareTop.map((d) => (
                 <div key={d.handle}>
                   <span className="text-foreground">{d.name.split(" ")[0]}:</span> {d.reason}
                 </div>
               ))}
+              {shareOthersCount > 0 && (
+                <div className="text-muted-foreground/70">
+                  + {shareOthersCount} more contributor{shareOthersCount === 1 ? "" : "s"} sharing{" "}
+                  {shareOthersPct}% — see the full Contribution Ranking above.
+                </div>
+              )}
             </div>
           </section>
         </div>
@@ -407,7 +483,7 @@ function ReportPage() {
             subtitle="Who owns which features, and how deep it goes."
           />
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {report.features.map((f) => (
+            {pagedFeatures.map((f) => (
               <div
                 key={f.name}
                 className="group rounded-2xl border border-border/60 bg-card/40 p-5 transition-all hover:border-accent/40 hover:bg-card/70"
@@ -455,6 +531,19 @@ function ReportPage() {
               </div>
             ))}
           </div>
+          {featPageCount > 1 && (
+            <div className="mt-3 overflow-hidden rounded-2xl border border-border/60 bg-card/30">
+              <Pagination
+                page={featPage}
+                pageCount={featPageCount}
+                onPage={setFeatPage}
+                rangeStart={featStart + 1}
+                rangeEnd={featStart + pagedFeatures.length}
+                total={report.features.length}
+                noun="features"
+              />
+            </div>
+          )}
         </section>
 
         <section className="mb-10">
@@ -519,6 +608,54 @@ function SectionHeader({
         {title}
       </h2>
       {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
+    </div>
+  );
+}
+
+function Pagination({
+  page,
+  pageCount,
+  onPage,
+  rangeStart,
+  rangeEnd,
+  total,
+  noun,
+}: {
+  page: number;
+  pageCount: number;
+  onPage: (p: number) => void;
+  rangeStart: number;
+  rangeEnd: number;
+  total: number;
+  noun: string;
+}) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border/60 px-5 py-3 text-xs text-muted-foreground">
+      <span className="tabular-nums">
+        {rangeStart}–{rangeEnd} of {total} {noun}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(page - 1)}
+          disabled={page <= 0}
+          className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/60 px-2 transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" /> Prev
+        </button>
+        <span className="px-2 tabular-nums">
+          {page + 1} / {pageCount}
+        </span>
+        <button
+          onClick={() => onPage(page + 1)}
+          disabled={page >= pageCount - 1}
+          className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/60 px-2 transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Next page"
+        >
+          Next <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
