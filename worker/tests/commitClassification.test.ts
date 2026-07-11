@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { classifyCommit, isBotIdentity, meaningfulFiles } from "../src/analyzers/commitClassification.js";
+import {
+  classifyCommit,
+  isBotIdentity,
+  isAiAssistantIdentity,
+  meaningfulFiles,
+} from "../src/analyzers/commitClassification.js";
 import type { RawCommit } from "../src/types.js";
 
 function commit(partial: Partial<RawCommit>): RawCommit {
@@ -21,6 +26,27 @@ describe("commit classification", () => {
   it("detects bot identities", () => {
     expect(isBotIdentity("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com")).toBe(true);
     expect(isBotIdentity("Jane Dev", "jane@example.com")).toBe(false);
+  });
+
+  it("detects AI coding assistants as automated authors", () => {
+    expect(isAiAssistantIdentity("Lovable", "bot@lovable.dev")).toBe(true);
+    expect(isAiAssistantIdentity("Cursor Agent", "cursoragent@cursor.com")).toBe(true);
+    expect(isAiAssistantIdentity("Claude", "noreply@anthropic.com")).toBe(true);
+    expect(isAiAssistantIdentity("Copilot", "x@example.com")).toBe(true);
+    // AI assistants are also treated as bots for scoring purposes.
+    expect(isBotIdentity("Lovable", "bot@lovable.dev")).toBe(true);
+    // A real developer whose name merely contains a substring is not caught.
+    expect(isAiAssistantIdentity("Jane Dev", "jane@example.com")).toBe(false);
+    expect(isAiAssistantIdentity("Marcus", "marcus@example.com")).toBe(false);
+  });
+
+  it("excludes AI coding assistant commits with a clear reason", () => {
+    const c = classifyCommit(
+      commit({ author: { name: "Lovable", email: "bot@lovable.dev" } }),
+    );
+    expect(c.classification.included).toBe(false);
+    expect(c.classification.isBot).toBe(true);
+    expect(c.classification.reason).toMatch(/ai coding assistant/i);
   });
 
   it("excludes merge commits", () => {

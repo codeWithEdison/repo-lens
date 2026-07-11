@@ -277,9 +277,9 @@ exports.
 ## Contribution scoring methodology
 
 The score is **not** based only on commits or lines of code — those are treated as
-evidence only. Low-signal activity (merge commits, bots, lockfile-only, generated
-files, formatting-only, and reverted changes) is excluded. Eight normalized,
-weighted metrics are combined:
+evidence only. Low-signal activity (merge commits, bots, **AI coding assistants**,
+lockfile-only, generated files, formatting-only, and reverted changes) is excluded.
+Eight normalized, weighted metrics are combined:
 
 
 | Metric                          | Default weight |
@@ -299,12 +299,55 @@ its raw value, normalized value, weight, weighted result, confidence, evidence a
 a human-readable explanation. Percentages are normalized to total 100 (unless no
 reliable contribution can be calculated). Results are estimates, not absolutes.
 
+### Automated authors and AI coding assistants
+
+Many repositories include commits authored by **automation**, not humans — CI bots
+(Dependabot, Renovate, GitHub Actions), and increasingly **AI coding assistants**
+that commit under their own Git identity (Lovable, Cursor, Claude, Copilot, Devin,
+bolt.new, v0, Codex, and similar tools).
+
+RepoLens treats these as **automated authors**, not separate human contributors:
+
+- Their commits are **excluded from scoring** (same as other bots).
+- They do **not** appear in the contribution ranking or equity-style splits.
+- Excluded commits are still recorded in evidence with reason
+  `AI coding assistant commit` or `Automated bot commit`.
+
+**Recognized AI assistant signals** (by author name or email domain) include:
+
+| Tool / family | Example signals |
+| ------------- | --------------- |
+| Lovable | `Lovable`, `*@lovable.dev` |
+| Cursor | `Cursor`, `Cursor Agent`, `cursoragent@*`, `*@cursor.com` |
+| Claude / Claude Code | `Claude`, `*@anthropic.com` |
+| Copilot | `Copilot`, `GitHub Copilot` |
+| OpenAI Codex | `Codex`, `*@openai.com` |
+| Devin | `Devin`, `*@devin.ai`, Cognition domains |
+| bolt.new | `bolt`, `*@stackblitz.com` |
+| v0, Sweep, Gemini Code | name patterns (`v0`, `Sweep`, `Gemini Code`) |
+
+Patterns live in `worker/src/analyzers/commitClassification.ts`
+(`isAiAssistantIdentity`). To add a new tool, extend
+`AI_ASSISTANT_NAME_PATTERNS` and/or `AI_ASSISTANT_EMAIL_PATTERNS` there and add a
+test in `worker/tests/commitClassification.test.ts`.
+
+**Important limitation:** when an AI tool is the **sole commit author**, Git does
+not record which human prompted it — RepoLens can exclude the tool but cannot
+reassign that work to a developer. Commits where the human remains author and the
+tool appears only in `Co-Authored-By` still credit the human normally. A
+developer's own direct commits always count in full.
+
 ---
 
 ## Current limitations
 
 - Feature detection uses transparent heuristics and may miss or mislabel features.
 - Contributor identity merging is conservative and may still be imperfect.
+- Commits authored solely by an AI coding assistant are excluded from human
+  scores but are not attributed back to the prompting developer (Git metadata
+  limitation).
+- New or uncommon AI tools may not be recognized until their author/email patterns
+  are added to `commitClassification.ts`.
 - Pull-request / review signals are only available when GitHub metadata can be
 fetched (public repos or with `GITHUB_TOKEN`).
 - Deep structural analysis currently covers TypeScript/JavaScript (ts-morph);

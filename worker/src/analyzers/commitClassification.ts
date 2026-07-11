@@ -23,6 +23,45 @@ const BOT_NAME_PATTERNS = [
   /^semantic-release-bot/i,
 ];
 
+/**
+ * AI coding assistants commit under their own identity (as author or
+ * co-author) rather than the human who prompted them. We treat them as
+ * automated authors so they don't appear as separate human contributors and
+ * don't dilute real contribution scores. The human's own direct commits still
+ * count normally.
+ */
+const AI_ASSISTANT_EMAIL_PATTERNS = [
+  /@lovable\.dev$/i,
+  /@cursor\.(com|sh)$/i,
+  /cursoragent@/i,
+  /@anthropic\.com$/i, // Claude / Claude Code
+  /@openai\.com$/i, // Codex / ChatGPT
+  /@stackblitz\.com$/i, // bolt.new
+  /@devin\.ai$/i,
+  /@cognition(-ai|labs)?\./i, // Devin (Cognition)
+];
+
+const AI_ASSISTANT_NAME_PATTERNS = [
+  /^lovable(\s|$|-)/i,
+  /^cursor(\s|agent|$)/i,
+  /^claude(\s|$)/i, // Claude, Claude Code
+  /^copilot(\s|$)/i,
+  /^github copilot/i,
+  /^devin(\s|$)/i,
+  /^bolt(\s|$)/i,
+  /^v0(\s|$|\.)/i,
+  /^codex(\s|$)/i,
+  /^sweep(\s|$)/i,
+  /^gemini code/i,
+];
+
+export function isAiAssistantIdentity(name: string, email: string): boolean {
+  return (
+    AI_ASSISTANT_EMAIL_PATTERNS.some((re) => re.test(email)) ||
+    AI_ASSISTANT_NAME_PATTERNS.some((re) => re.test(name.trim()))
+  );
+}
+
 const LOCKFILE_NAMES = new Set([
   "package-lock.json",
   "yarn.lock",
@@ -55,7 +94,8 @@ const REVERT_RE = /^revert\b|this reverts commit/i;
 export function isBotIdentity(name: string, email: string): boolean {
   return (
     BOT_EMAIL_PATTERNS.some((re) => re.test(email)) ||
-    BOT_NAME_PATTERNS.some((re) => re.test(name))
+    BOT_NAME_PATTERNS.some((re) => re.test(name)) ||
+    isAiAssistantIdentity(name, email)
   );
 }
 
@@ -80,6 +120,7 @@ function isFormattingOnly(commit: RawCommit): boolean {
 }
 
 export function classifyCommit(commit: RawCommit): ClassifiedCommit {
+  const isAiAssistant = isAiAssistantIdentity(commit.author.name, commit.author.email);
   const isBot = isBotIdentity(commit.author.name, commit.author.email);
   const isRevert = REVERT_RE.test(commit.message);
   const lockfileOnly = isLockfileOnly(commit);
@@ -92,6 +133,9 @@ export function classifyCommit(commit: RawCommit): ClassifiedCommit {
   if (commit.isMerge) {
     included = false;
     reason = "Merge commit";
+  } else if (isAiAssistant) {
+    included = false;
+    reason = "AI coding assistant commit";
   } else if (isBot) {
     included = false;
     reason = "Automated bot commit";
