@@ -3,10 +3,10 @@ import { useState, type KeyboardEvent } from "react";
 import { AppShell } from "@/components/repolens/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Github, GitBranch, Plus, Sparkles, X, ArrowRight, Upload } from "lucide-react";
+import { Github, GitBranch, Plus, Sparkles, X, ArrowRight, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { parseRepoUrl, type RepoInput } from "@/lib/mock-analysis";
-import { setPendingRepos } from "@/lib/analysis-store";
+import { parseRepoUrl, type RepoInput } from "@/lib/report-types";
+import { createAnalysis, RepoLensApiError } from "@/lib/api-client";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -16,6 +16,7 @@ function Home() {
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [repos, setRepos] = useState<RepoInput[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const addRepo = () => {
     const parsed = parseRepoUrl(url);
@@ -33,14 +34,26 @@ function Home() {
 
   const removeRepo = (id: string) => setRepos((prev) => prev.filter((r) => r.id !== id));
 
-  const analyze = () => {
-    if (!repos.length) {
+  const startAnalysis = async (targetRepos: RepoInput[]) => {
+    if (!targetRepos.length) {
       toast.error("Add at least one repository");
       return;
     }
-    setPendingRepos(repos);
-    navigate({ to: "/analysis" });
+    setSubmitting(true);
+    try {
+      const result = await createAnalysis(targetRepos.map((r) => ({ url: r.url })));
+      navigate({ to: "/analysis", search: { id: result.analysisId } });
+    } catch (err) {
+      const message =
+        err instanceof RepoLensApiError
+          ? err.message
+          : "Could not reach the analysis service. Is the API running?";
+      toast.error(message);
+      setSubmitting(false);
+    }
   };
+
+  const analyze = () => void startAnalysis(repos);
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -51,12 +64,11 @@ function Home() {
 
   const demo = () => {
     const sample = [
-      parseRepoUrl("https://github.com/vercel/next.js")!,
       parseRepoUrl("https://github.com/tanstack/router")!,
+      parseRepoUrl("https://github.com/honojs/hono")!,
     ];
     setRepos(sample);
-    setPendingRepos(sample);
-    navigate({ to: "/analysis" });
+    void startAnalysis(sample);
   };
 
   return (
@@ -141,7 +153,7 @@ function Home() {
               <Button
                 size="sm"
                 onClick={analyze}
-                disabled={!repos.length}
+                disabled={!repos.length || submitting}
                 className="gap-1.5"
                 style={
                   repos.length
@@ -152,8 +164,16 @@ function Home() {
                     : undefined
                 }
               >
-                Analyze {repos.length ? `(${repos.length})` : ""}
-                <ArrowRight className="h-3.5 w-3.5" />
+                {submitting ? (
+                  <>
+                    Starting <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  </>
+                ) : (
+                  <>
+                    Analyze {repos.length ? `(${repos.length})` : ""}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </>
+                )}
               </Button>
             </div>
           </div>

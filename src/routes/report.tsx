@@ -1,8 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/repolens/AppShell";
-import { getReport } from "@/lib/analysis-store";
-import type { AnalysisReport } from "@/lib/mock-analysis";
+import type { AnalysisReport } from "@/lib/report-types";
+import {
+  getAnalysisReport,
+  getAnalysisProgress,
+  downloadPdfExport,
+  downloadJsonExport,
+  downloadCsvExport,
+  deleteAnalysis,
+  RepoLensApiError,
+} from "@/lib/api-client";
+import { adaptReport, type BackendReport } from "@/lib/report-adapter";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
@@ -18,6 +27,8 @@ import {
   GitBranch,
   Users,
   Boxes,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,6 +45,9 @@ import {
 } from "recharts";
 
 export const Route = createFileRoute("/report")({
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === "string" ? search.id : undefined,
+  }),
   component: ReportPage,
 });
 
@@ -46,11 +60,61 @@ const CHART_COLORS = [
 ];
 
 function ReportPage() {
+  const navigate = useNavigate();
+  const { id } = Route.useSearch();
   const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setReport(getReport());
-  }, []);
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const [result, progress] = await Promise.all([
+          getAnalysisReport<BackendReport>(id),
+          getAnalysisProgress(id).catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (result.status === "pending" || !result.report) {
+          // Report still generating — send the user back to the progress view.
+          navigate({ to: "/analysis", search: { id } });
+          return;
+        }
+        let elapsed = 0;
+        if (progress?.startedAt && progress?.completedAt) {
+          elapsed = new Date(progress.completedAt).getTime() - new Date(progress.startedAt).getTime();
+        }
+        setReport(adaptReport(result.report, elapsed));
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof RepoLensApiError ? err.message : "Could not load the report.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  if (loading) {
+    return (
+      <AppShell>
+        <main className="mx-auto max-w-2xl px-6 py-32 text-center">
+          <Loader2 className="mx-auto mb-6 h-8 w-8 animate-spin text-accent" />
+          <h1 className="text-2xl font-semibold tracking-tight">Loading report…</h1>
+        </main>
+      </AppShell>
+    );
+  }
 
   if (!report) {
     return (
@@ -59,9 +123,11 @@ function ReportPage() {
           <div className="mx-auto mb-6 grid h-14 w-14 place-items-center rounded-2xl border border-border/60 bg-card/50">
             <GitBranch className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">No analysis yet</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {error ? "Report unavailable" : "No analysis yet"}
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Paste a repository URL or connect GitHub to begin.
+            {error ?? "Paste a repository URL to begin a new analysis."}
           </p>
           <div className="mt-6">
             <Button asChild>
@@ -73,36 +139,16 @@ function ReportPage() {
     );
   }
 
-  const download = (kind: "json" | "csv") => {
-    let content = "";
-    let mime = "application/json";
-    if (kind === "json") {
-      content = JSON.stringify(report, null, 2);
-    } else {
-      mime = "text/csv";
-      const header =
-        "developer,contribution_pct,features,technical_impact,complexity,consistency,reviews,final_score";
-      const rows = report.developers.map((d) =>
-        [
-          d.name,
-          d.contributionPct,
-          d.features,
-          d.technicalImpact,
-          d.complexity,
-          d.consistency,
-          d.reviews,
-          d.finalScore,
-        ].join(","),
-      );
-      content = [header, ...rows].join("\n");
+  const analysisId = report.analysisId;
+
+  const removeAnalysis = async () => {
+    try {
+      await deleteAnalysis(analysisId);
+      toast.success("Analysis data deleted");
+      navigate({ to: "/" });
+    } catch {
+      toast.error("Could not delete the analysis");
     }
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `repolens-report.${kind}`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const pieData = report.developers.map((d) => ({
@@ -137,13 +183,13 @@ function ReportPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => download("json")}>
+            <Button variant="outline" size="sm" onClick={() => downloadJsonExport(analysisId)}>
               <FileJson className="mr-1.5 h-3.5 w-3.5" /> JSON
             </Button>
-            <Button variant="outline" size="sm" onClick={() => download("csv")}>
+            <Button variant="outline" size="sm" onClick={() => downloadCsvExport(analysisId)}>
               <FileText className="mr-1.5 h-3.5 w-3.5" /> CSV
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.print()}>
+            <Button variant="outline" size="sm" onClick={() => downloadPdfExport(analysisId)}>
               <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
             </Button>
             <Button
@@ -155,6 +201,9 @@ function ReportPage() {
               }}
             >
               <Link2 className="mr-1.5 h-3.5 w-3.5" /> Copy link
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void removeAnalysis()}>
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
             </Button>
           </div>
         </div>
