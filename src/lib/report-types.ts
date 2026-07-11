@@ -52,6 +52,12 @@ export interface AnalysisReport {
   analysisId: string;
   repositories: RepoInput[];
   developers: Developer[];
+  /** Total number of scored human contributors (may exceed `developers`). */
+  totalContributors: number;
+  /** Combined contribution share (%) of contributors not shown in `developers`. */
+  othersShare: number;
+  /** Count of contributors not shown in `developers` (folded into "Others"). */
+  othersCount: number;
   features: Feature[];
   timeline: TimelinePoint[];
   insights: {

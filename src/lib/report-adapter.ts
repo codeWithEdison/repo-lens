@@ -70,8 +70,6 @@ export interface BackendReport {
   contributionTimeline: BackendTimelinePoint[];
 }
 
-const MAX_DEVELOPERS = 5;
-
 function metric(metrics: BackendMetric[], key: string): number {
   const m = metrics.find((x) => x.key === key);
   return m ? Math.round(m.normalizedValue * 100) : 0;
@@ -84,7 +82,11 @@ function firstName(name: string): string {
 export function adaptReport(backend: BackendReport, analysisTimeMs: number): AnalysisReport {
   const idToName = new Map(backend.contributors.map((c) => [c.id, c.name] as const));
 
-  const topScores = backend.contributionScores.slice(0, MAX_DEVELOPERS);
+  // Show every scored contributor. Percentages are computed across all of them
+  // and sum to 100, so no "Others" bucket is needed when all are shown.
+  const topScores = backend.contributionScores;
+  const othersShare = 0;
+  const othersCount = 0;
 
   const developers: Developer[] = topScores.map((s) => ({
     name: s.name,
@@ -139,6 +141,9 @@ export function adaptReport(backend: BackendReport, analysisTimeMs: number): Ana
     analysisId: backend.analysisId,
     repositories,
     developers,
+    totalContributors: backend.contributionScores.length,
+    othersShare,
+    othersCount,
     features,
     timeline,
     insights: {
