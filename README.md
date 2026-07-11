@@ -410,7 +410,21 @@ npm run typecheck:all
 
 ---
 
+## License
+
+RepoLens is [MIT licensed](LICENSE).
+
+Copyright © 2026 [codewithedison](https://github.com/codeWithEdison).
+
+You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the software under the terms of the MIT License. See [LICENSE](LICENSE)
+for the full text.
+
+---
+
 ## How to contribute
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. In short:
 
 1. Fork [codeWithEdison/repo-lens](https://github.com/codeWithEdison/repo-lens) and branch from the default branch.
 2. Keep the stateless model: no database, no auth, no permanent persistence.

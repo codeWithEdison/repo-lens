@@ -10,6 +10,8 @@
   "bugs": {
     "url": "https://github.com/codeWithEdison/repo-lens/issues"
   },
+  "license": "MIT",
+  "author": "codewithedison (https://github.com/codeWithEdison)",
   "sideEffects": false,
   "type": "module",
   "scripts": {
