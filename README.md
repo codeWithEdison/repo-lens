@@ -36,7 +36,6 @@ after processing (success or failure).
 
 ### Tech stack
 
-
 | Layer      | Technology                                                                 |
 | ---------- | -------------------------------------------------------------------------- |
 | Frontend   | React 19, TypeScript, TanStack Start/Router, Tailwind, shadcn/ui, Recharts |
@@ -44,12 +43,11 @@ after processing (success or failure).
 | Worker     | Node.js, TypeScript, BullMQ, simple-git, Octokit, ts-morph, pdfkit         |
 | Queue      | Redis + BullMQ                                                             |
 
-
 ---
 
 ## Repository structure
 
-```
+```text
 repo-lens/
 ├── src/                 # Existing frontend (unchanged design)
 │   └── lib/api-client.ts, report-adapter.ts, report-types.ts
@@ -104,7 +102,21 @@ docker run -p 6379:6379 redis:7-alpine
 # or use a locally installed redis-server
 ```
 
-### 5. Run the three processes (separate terminals)
+### 5. Run the app
+
+Single command:
+
+```bash
+npm run dev:all
+```
+
+This starts:
+
+- frontend
+- API server
+- background worker
+
+Or run them separately in three terminals:
 
 ```bash
 npm run dev:server   # API on http://localhost:4000
@@ -119,7 +131,6 @@ Open [http://localhost:5173](http://localhost:5173), paste a repository URL, and
 ## Environment variables
 
 See `.env.example` for the full list. Key values:
-
 
 | Variable                                       | Default                               | Purpose                                              |
 | ---------------------------------------------- | ------------------------------------- | ---------------------------------------------------- |
@@ -142,7 +153,6 @@ See `.env.example` for the full list. Key values:
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`      | –                                     | Optional AI provider                                 |
 | `GITHUB_TOKEN`                                 | –                                     | Optional, for GitHub metadata / rate limits          |
 | `VITE_API_URL`                                 | `http://localhost:4000`               | Frontend → API base URL                              |
-
 
 ---
 
@@ -169,8 +179,8 @@ curl -X POST http://localhost:4000/api/analyses \
 
 - GitHub — Personal Access Token. A **classic** token with the `repo` scope is
 simplest. A **fine-grained** token must have: resource owner set to the repo
-owner/org, this repository in its selected repositories, and **Contents: Read
-  - Metadata: Read**. Org repos may require the org to enable/approve
+owner/org, this repository in its selected repositories, and **Contents: Read**
+plus **Metadata: Read**. Org repos may require the org to enable/approve
   fine-grained tokens, and SAML SSO orgs require a classic token. Authenticated
   as `oauth2` over HTTPS.
 - GitLab — Project/Personal Access Token with `read_repository`. Sent as `oauth2`.
@@ -204,7 +214,6 @@ single-origin reverse proxy.
 
 ## API endpoints
 
-
 | Method   | Path                               | Description                                      |
 | -------- | ---------------------------------- | ------------------------------------------------ |
 | `POST`   | `/api/analyses`                    | Create an analysis (returns `analysisId`, `202`) |
@@ -216,7 +225,6 @@ single-origin reverse proxy.
 | `GET`    | `/api/export/csv/:analysisId`      | CSV export                                       |
 | `DELETE` | `/api/analysis/:analysisId`        | Delete workspace (idempotent)                    |
 | `GET`    | `/api/health`                      | Health + Redis status                            |
-
 
 All errors use one shape:
 
@@ -230,7 +238,7 @@ All errors use one shape:
 
 Each analysis owns an isolated directory:
 
-```
+```text
 workspace/analysis_8b4fd7c2/
 ├── metadata.json      # status, repos, timestamps, expiry
 ├── progress.json      # live progress (never regresses)
@@ -281,7 +289,6 @@ evidence only. Low-signal activity (merge commits, bots, **AI coding assistants*
 lockfile-only, generated files, formatting-only, and reverted changes) is excluded.
 Eight normalized, weighted metrics are combined:
 
-
 | Metric                          | Default weight |
 | ------------------------------- | -------------- |
 | Feature Ownership               | 30%            |
@@ -292,7 +299,6 @@ Eight normalized, weighted metrics are combined:
 | Architecture and Infrastructure | 5%             |
 | Code Review and Collaboration   | 5%             |
 | Maintenance and Stabilization   | 5%             |
-
 
 Weights are configurable in `worker/src/scoring/weights.ts`. Each metric records
 its raw value, normalized value, weight, weighted result, confidence, evidence and
@@ -376,7 +382,7 @@ Deeper structural signals come from `LanguageAnalyzer` implementations
 The app runs fully without AI (`NoopAIProvider` produces deterministic,
 template-based, evidence-driven text). To use an OpenAI-compatible endpoint set:
 
-```
+```bash
 AI_PROVIDER=openai-compatible
 AI_BASE_URL=https://api.openai.com/v1
 AI_API_KEY=sk-...

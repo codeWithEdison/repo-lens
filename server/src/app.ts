@@ -9,6 +9,14 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
 import apiRoutes from "./routes/index.js";
 
+function isAllowedOrigin(origin: string): boolean {
+  if (env.corsOrigins.includes(origin)) return true;
+  if (!env.isProduction) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  }
+  return false;
+}
+
 export function createApp(): Express {
   const app = express();
 
@@ -18,7 +26,13 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.corsOrigins.length ? env.corsOrigins : true,
+      origin(origin, callback) {
+        if (!origin || isAllowedOrigin(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+      },
       methods: ["GET", "POST", "DELETE"],
       credentials: false,
     }),
